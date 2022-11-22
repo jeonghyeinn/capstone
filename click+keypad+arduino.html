@@ -1,0 +1,302 @@
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.1/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.1/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.2/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.1/hands.js" crossorigin="anonymous"></script>
+    <!-- 버전에 따라서 예제가 동작하지 않는 경우가 있습니다. 아래 버전을 권장합니다. -->
+    <script src="https://cdn.jsdelivr.net/npm/danfojs@0.1.2/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.4.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis"></script>
+
+</head>
+<style>
+    body{
+        cursor: none;
+    }
+    .cursor{
+      width: 2rem;
+      height: 2rem;
+      border: 4px solid #ff253a;
+      border-radius: 50%;
+      background-color: #ff253a29;
+      position: absolute;
+      z-index: 110000;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      transition: all 0.3s ease;
+      transition-property: background, transform;
+      transform-origin: 100% 100%;
+      background-size: cover;
+    }
+    video{
+        transform: rotateY(180deg);
+        -webkit-transform:rotateY(180deg); /* Safari and Chrome */
+        -moz-transform:rotateY(180deg); /* Firefox */
+        /* visibility: hidden; */
+        width: 0;
+        outline: none;
+        border: none;
+      }
+      canvas{
+        transform: rotateY(180deg);
+        -webkit-transform:rotateY(180deg); /* Safari and Chrome */
+        -moz-transform:rotateY(180deg); /* Firefox */
+        /* visibility: hidden; */
+        /* position:fixed; */
+        /* background-color: rgb(224, 224, 224);
+        width: 100%;
+        height: 100%; */
+        z-index: -5;
+      }
+      div.containger{
+        width : 100px;
+        margin: auto;
+      }
+      /* div{
+        margin: 300px 50px;
+      }
+      #my_button{
+        width:100px;
+        margin:auto;
+        display:block;
+      } */
+
+      *{
+        margin : 0;
+        padding : 0;
+        box-sizing: border-box;
+        position: relative;
+    }
+    .flex{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    body{
+        width:100vw;
+        height: 100vh;
+        background: #222;
+        color: #fff;
+        font-family: snas-serif;
+    }
+    .numPan{
+        border-radius:10px;
+        background-color: #111;
+    }
+    .numPan .disp{
+        border-bottom: 2px solid #00a8ff;
+    }
+    .numPan .disp input{
+        width:250px;
+        padding:20px;
+        outline: none;
+        border: none;
+        background: none;
+        text-align: center;
+        color:#fff;
+        font-size: 2em;
+    }
+    .numPan .nums > .r div{
+        width:50px;
+        height: 50px;
+        margin: 10px;
+        border: 1px solid #00a8ff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        border-radius: 50%;
+        /* cursor : pointer; */
+        box-shadow: 0 0 30px #00a8ff0f;
+    }
+</style>
+<body>
+    <div class="container" style="display:none">
+        <video class="input_video" width="500px" height="500px"></video>
+        <canvas class="output_canvas" width="600px" height="600px"></canvas>
+    
+        <!-- <canvas class="output_canvas" width="canvasW" width="canvasH"></canvas> -->
+    </div>
+    <div class="cursor"></div>
+    <!-- <div>
+        <button id="my_button">클릭</button>
+    </div> -->
+</body>
+<!-- <script>
+    const myButton = document.getElementById("my_button");
+    myButton.addEventListener('click', () => {
+    document.body.style.backgroundColor = 'skyblue';
+});
+</script> -->
+<script src="/js/keypad2_edit_click_str.js"></script>
+<script src="/js/cursor.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script type="text/javascript">
+// <script type="module">
+let socket = io();
+
+const videoElement = document.getElementsByClassName('input_video')[0];
+const canvasElement = document.getElementsByClassName('output_canvas')[0];
+const canvasCtx = canvasElement.getContext('2d');
+
+let click_on = 0;
+
+function onResults(results) {
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+    
+    if (results.multiHandLandmarks) {
+        for (const landmarks of results.multiHandLandmarks) {
+            //let x = landmarks[4]['x']; // 검지손가락의 좌표(전체 대비 비율값으로 나옴)
+            //let y = landmarks[4]['y'];
+            //let location = [x, y];
+            var x = landmarks[17]['x'];
+            var y = landmarks[17]['y'];
+            var location =[x, y];
+
+            socket.emit('location', location);
+
+            drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS,{color: '#00FF00', lineWidth: 3}),
+            drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1});
+            
+            let joint = Array.from(Array(4), () => new Array(3));
+
+            for(let i=17; i<21; i++){
+                joint[i] = [landmarks[i]['x'], landmarks[i]['y'], landmarks[i]['z']];
+            }
+
+            let angles = []
+
+            function dot(a, b) {
+                let result = 0;
+                for (let i in a) {
+                    result += a[i] * b[i];
+                }
+                return result;
+            }
+
+            function vector(a,b){
+                let v = [];
+                for (let i in a){
+                    v.push(a[i] - b[i]);
+                }
+                return v;
+            }
+
+            function norm(a){
+                let x = 0;
+                for (let i in a){
+                    x += a[i]*a[i];
+                }
+                x = Math.sqrt(x);
+                return x;
+            }
+
+            for(let j=18; j<20; j++){
+                let v1 = vector(joint[j-1], joint[j])
+                let v2 = vector(joint[j+1], joint[j])
+
+                let cosine_angle = dot(v1, v2) / (norm(v1)*norm(v2));
+                let angle = Math.acos(cosine_angle);
+                let degree = (angle * 180) / Math.PI;
+                degree = degree.toFixed(1)
+                degree = parseInt(degree);
+                angles.push(degree);
+            }
+            socket.emit('angles', angles)
+            predgesture(angles);
+        }
+    }
+    canvasCtx.restore();
+}
+
+const hands = new Hands({locateFile: (file) => {
+    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.1/${file}`;
+  }});
+
+hands.setOptions({
+      maxNumHands: 1,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5});
+
+hands.onResults(onResults);
+
+const camera = new Camera(videoElement, {
+    onFrame: async () => {
+        await hands.send({image: videoElement});
+    }, 
+    width: 1920, 
+    height: 1080});
+
+camera.start();
+
+async function predgesture(angles) {
+    const model = await tf.loadLayersModel('https://raw.githubusercontent.com/jeonghyeinn/project/main/model/model_1.json');
+    pred = model.predict(tf.tensor([angles]));
+    //model.predict(tf.tensor([angles])).print(); // 결과가 바로 콘솔창에 출력됨
+    let gesture_result = pred.arraySync()[0][1]; // click열 값
+    
+    if (gesture_result > 0.6) {
+            console.log('click!');
+            // socket.emit('gesture', 1);
+            click_on += 1;
+        // simulateClick();
+    //     socket.on('click',function (data) {
+    //         if(data == '1'){
+    //         sleep(200);
+    //     }
+    // });
+    }
+    else{
+        if(click_on >= 1){
+            socket.emit('gesture', 1);
+            console.log(click_on);
+            click_on=0;
+        }
+        console.log('none!');
+        socket.emit('gesture', 0);
+    }
+}
+
+// function simulateClick() {
+//     const event = new MouseEvent('click', {
+//     view: window,
+//     bubbles: true,
+//     cancelable: true
+//   });
+//   let cb = document.elementFromPoint((width - x * width), y*height);
+//   cb.dispatchEvent(event);
+// }
+
+function sleep(ms) {
+    const wakeUpTime = Date.now() + ms;
+    while (Date.now() < wakeUpTime) {}
+  }
+
+  btn.forEach(val => {
+    val.addEventListener("click",()=>{
+        if(val.innerText.charCodeAt() != 8592 || val.innerText.charCodeAt() == 8626) {
+            inp.value+=val.innerText;
+            input_pw.push(val.innerText);
+            // console.log(input_pw);
+            }
+        if(val.innerText.charCodeAt() == 8592){
+            inp.value=inp.value.substring(0,inp.value.length-1)
+            input_pw.pop();
+            }
+        if(val.innerText.charCodeAt() == 8626){
+            inp.value=inp.value.substring(0,0)
+            input_pw.pop();
+            console.log(input_pw);
+            output_pw = input_pw.join("");
+            console.log(output_pw);
+            socket.emit("pw", output_pw);
+            input_pw.splice(0,input_pw.length);
+            }
+    })
+});
+
+</script>
+</html>
